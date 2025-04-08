@@ -83,7 +83,7 @@
         <mxCell id="ZshORXcRM0CLrv4FuOSH-74" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="ZshORXcRM0CLrv4FuOSH-72" target="ZshORXcRM0CLrv4FuOSH-69" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="ZshORXcRM0CLrv4FuOSH-77" value="" style="rounded=1;whiteSpace=wrap;html=1;absoluteArcSize=1;arcSize=14;strokeWidth=2;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="1" vertex="1">
+        <mxCell id="ZshORXcRM0CLrv4FuOSH-77" value="Change mode, reset elapsed time" style="rounded=1;whiteSpace=wrap;html=1;absoluteArcSize=1;arcSize=14;strokeWidth=2;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="1" vertex="1">
           <mxGeometry x="540" y="270" width="140" height="50" as="geometry" />
         </mxCell>
         <mxCell id="ZshORXcRM0CLrv4FuOSH-78" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="ZshORXcRM0CLrv4FuOSH-79" target="ZshORXcRM0CLrv4FuOSH-83" edge="1">
