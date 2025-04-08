@@ -16,17 +16,14 @@
 #include "msp430fr2355.h"
 
 
-uint8_t current_pattern = 0, tx_byte_cnt = 0, avg_temp_flag = 0, current_pattern_state = 9, ambient_mode = 0, read_temp_flag = 0, read_time_flag;
-// starting values for every pattern
-const uint8_t DEFAULT_PATTERNS[8] = {170, 170, 0, 24, 255, 1, 127, 1};
-const uint8_t LED_BAR_ADDR = 0x0A, LM92_ADDR = 0b01001000;
-uint8_t patterns[8] = {170, 170, 0, 24, 255, 1, 127, 1};
-char cur_char, cur_state;
+uint8_t current_pattern = 0, tx_byte_cnt = 0, avg_temp_flag = 0, cur_sec_elapsed, cur_min_elapsed ambient_mode = 0, read_temp_flag = 0, read_time_flag = 0, read_sec = 0;
+const uint8_t LED_BAR_ADDR = 0x0A, LM92_ADDR = 0b01001000, RTC_ADDR = 0x48;
+char cur_char, cur_state; 
 
 // initialize temperature variables
 unsigned int temp_buffer[9];        // maximum window is 9
 unsigned int total = 0;             // walking total of buffer values
-uint8_t current_idx = 0;                // index of newest recorded values
+uint8_t current_idx = 0;            // index of newest recorded values
 uint8_t window_size = 3;            // default window size
 uint8_t adc_flag =0;                 
 
@@ -37,8 +34,6 @@ Keypad keypad = {
     .col_pins = {BIT4, BIT5, BIT2, BIT0},    // order is 1, 2, 3, 4
     .passkey = {'1','1','1','1'},
 };
-
-char pk_attempt[4] = {'x','x','x','x'};
 
 /**
 * inits pattern transmit
@@ -52,11 +47,23 @@ void transmit_pattern()
 }
 
 /**
+* resets the 
+*/
+void reset_time()
+{
+    tx_byte_cnt = 3;                    // send 3 0s (reg addr, sec, minutes)
+    UCB0I2CSA = RTC_ADDR;                            
+    while (UCB0CTLW0 & UCTXSTP);        // Ensure stop condition got sent
+    UCB0CTLW0 |= UCTR | UCTXSTT;        // I2C TX, start condition
+}
+
+/**
 * sets the lcd mode
 */
 void transmit_lcd_mode()
 {
 
+    reset_time();               // since we're switching mode, reset rtc time
 }
 
 /**
@@ -68,11 +75,11 @@ void transmit_lcd_temps()
 }
 
 /**
-* sets the lcd time
+* sets the lcd time to the received time from the RTC
 */
 void transmit_lcd_elapsed_time()
 {
-
+  
 }
 
 /**
@@ -84,8 +91,6 @@ void change_n(uint8_t new_window_size)
     window_size = new_window_size;
     current_idx = 0;
 }
-
-
 
 /**
 * Calculate average temperature
@@ -141,6 +146,11 @@ void init(void)
     P6DIR |= BIT6;              // Config as Output
     P6OUT |= BIT6;              // turn on to start
 
+    // Configure Peltier Device Pins: 6.0 is heat, 6.1 is cool.
+    P6DIR |= BIT0 + BIT1;
+    P6OUT &= ~(BIT1 + BIT0);    // Start off... IMPORTANT!!!!!!!!!!!
+
+
     // Timer B0
     // Math: 1s = (1*10^-6)(D1)(D2)(25k)    D1 = 5, D2 = 8
     TB0CTL |= TBCLR;            // Clear timer and dividers
@@ -175,11 +185,13 @@ void init(void)
     // Configure USCI_B0 for I2C mode
     UCB0CTLW0 |= UCSWRST;                             // put eUSCI_B in reset state
     UCB0CTLW0 |= UCMODE_3 | UCMST;                    // I2C master mode, SMCLK
+    UCB0CTLW1 |= UCASTP_2;                            // Automatic stop after hit TBCNT
     UCB0I2CSA = LED_BAR_ADDR;                         // configure slave address
     UCB0BRW = 0x8;                                    // baudrate = SMCLK / 8
+    UCB0TBCNT = 2;                                    // num bytes to recieve
 
     UCB0CTLW0 &=~ UCSWRST;                            // clear reset register
-    UCB0IE |= UCTXIE0 | UCNACKIE;                     // transmit and NACK interrupt enable
+    UCB0IE |= UCTXIE0 | UCNACKIE | UCRXIE0 | UCBCNTIE;// transmit, receive, TBCNT, and NACK
     
     //--- Configure ADC
     ADCCTL0 &= ~ADCSHT;         // Clear ADCSHT from def. of ADCSHT = 01
@@ -213,12 +225,16 @@ void set_state(char state)
             {
                 ambient_mode = 0;
             }
+            P6OUT |= BIT0;
+            P6OUT &= ~BIT1;
             break;
         case COOL:                      // set heat pin to 0, cool pin to 1
             if(ambient_mode)
             {
                 ambient_mode = 0;
             }
+            P6OUT |= BIT0;
+            P6OUT &= ~BIT1;
             break;
         case AMBIENT:
             
@@ -228,6 +244,7 @@ void set_state(char state)
             {
                 ambient_mode = 0;
             }
+            P6OUT &= ~(BIT1 + BIT0);
             break;
         default:
             
@@ -252,6 +269,7 @@ int main(void)
     init();
     init_keypad(&keypad);
     set_state(OFF);
+    transmit_lcd_mode();
 
     while(true)
     {
@@ -322,9 +340,20 @@ int main(void)
             read_temp_flag = 0;
         }
 
+        // send register address of time, read 
         if(read_time_flag)
         {
+            tx_byte_cnt = 1;
+            UCB0I2CSA = RTC_ADDR;
+            while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
+            UCB0CTLW0 |= UCTR | UCTXSTT;                      // I2C TX, start condition
+            __delay_cycles(1000);
+            while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
+            UCB0CTLW0 &= ~UCTR;          // Put into Rx mode
+            UCB0CTLW0 |= UCTXSTT;        // generate START cond.
+
             read_time_flag = 0;
+            transmit_lcd_elapsed_time();
         }
 
         __delay_cycles(100000);             // Delay for 100000*(1/MCLK)=0.1s
@@ -354,9 +383,10 @@ __interrupt void transmit_data(void)
             {
                 UCB0TXBUF = current_pattern;            // Load TX buffer
             }
-            else 
+            else if(UCB0I2CSA == RTC_ADDR)
             {
-                UCB0TXBUF = cur_char;           
+                // register address begins at 0, then we set sec and min to 0
+                UCB0TXBUF = 0;                          
             }
             tx_byte_cnt--;                              // Decrement TX byte counter
         }
@@ -367,7 +397,16 @@ __interrupt void transmit_data(void)
         } 
         break;
     case USCI_I2C_UCRXIFG0:                 // ID 0x16: Rx IFG
-
+        if(read_sec)
+        {
+            cur_min_elapsed = UCB0RXBUF; 
+            read_sec = 0;   
+        }
+        else 
+        {
+            cur_sec_elapsed = UCB0RXBUF;
+            ++read_sec;
+        }
         break;                                    
     default:
         break;
@@ -383,7 +422,10 @@ __interrupt void transmit_data(void)
 __interrupt void heartbeat_LED(void)
 {
     P1OUT ^= BIT0;          // LED1 xOR
-    read_time_flag = 1;
+    if(cur_state != OFF)
+    {
+        read_time_flag = 1;
+    }
     TB1CCTL0 &= ~CCIFG;     // clear flag
 }
 // ----- end heartbeat_LED-----
