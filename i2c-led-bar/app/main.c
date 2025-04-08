@@ -8,9 +8,16 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-uint8_t recieved_pattern = 0;
+uint8_t led_pattern = 0;
+uint8_t received_mode = 0;
 uint8_t data_recieved_count = 0;
 uint8_t data_received = 0;
+
+uint8_t patterns[3] = {127, 1, 0};
+
+#define HEATING 2
+#define COOLING 1
+#define NEUTRAL 0
 
 int main(void)
 {
@@ -80,7 +87,7 @@ int main(void)
 void write_to_bar()
 {
     // P1.4-7 = bit 0-3, P1.1 = b4, P1.0 = b5, P2.7 = b6, P2.6 = b7
-    if((BIT0 & recieved_pattern) == 0)   
+    if((BIT0 & led_pattern) == 0)   
     {
         P1OUT &= ~BIT4;
     }
@@ -88,7 +95,7 @@ void write_to_bar()
     {
         P1OUT |= BIT4;
     }
-    if((BIT1 & recieved_pattern) == 0)
+    if((BIT1 & led_pattern) == 0)
     {
         P1OUT &= ~BIT5;
     }
@@ -96,7 +103,7 @@ void write_to_bar()
     {
         P1OUT |= BIT5;
     }
-    if((BIT2 & recieved_pattern) == 0)
+    if((BIT2 & led_pattern) == 0)
     {
         P1OUT &= ~BIT6;
     }
@@ -104,7 +111,7 @@ void write_to_bar()
     {
         P1OUT |= BIT6;
     }
-    if((BIT3 & recieved_pattern) == 0)
+    if((BIT3 & led_pattern) == 0)
     {
         P1OUT &= ~BIT7;
     }
@@ -112,7 +119,7 @@ void write_to_bar()
     {
         P1OUT |= BIT7;
     }
-    if((BIT4 & recieved_pattern) == 0)
+    if((BIT4 & led_pattern) == 0)
     {
         P1OUT &= ~BIT1;
     }
@@ -120,7 +127,7 @@ void write_to_bar()
     {
         P1OUT |= BIT1;
     }
-    if((BIT5 & recieved_pattern) == 0)
+    if((BIT5 & led_pattern) == 0)
     {
         P1OUT &= ~BIT0;
     }
@@ -128,7 +135,7 @@ void write_to_bar()
     {
         P1OUT |= BIT0;
     }
-    if((BIT6 & recieved_pattern) == 0)
+    if((BIT6 & led_pattern) == 0)
     {
         P2OUT &= ~BIT7;
     }
@@ -136,7 +143,7 @@ void write_to_bar()
     {
         P2OUT |= BIT7;
     }
-    if((BIT7 & recieved_pattern) == 0)
+    if((BIT7 & led_pattern) == 0)
     {
         P2OUT &= ~BIT6;
     }
@@ -160,8 +167,7 @@ __interrupt void receive_data(void)
     {
     case USCI_I2C_UCRXIFG0:                 // ID 0x16: Rx IFG
         data_received = 1;
-        recieved_pattern = UCB0RXBUF;    // retrieve data
-        write_to_bar();
+        received_mode = UCB0RXBUF;    // retrieve mode
         break;
     default:
         break;
@@ -190,6 +196,39 @@ __interrupt void heartbeat_LED(void)
             TB0CCR0 = 25000;
         }
     }
+
+    // getting binary code for current light pattern
+    switch (received_mode) {
+        case HEATING:
+            // fill right
+            if(patterns[0] == 0b10000000)
+            {
+                patterns[0] = 0b11111111;
+            }
+            else 
+            {
+                patterns[0] >>= 1; 
+                patterns[0] |= BIT7;   
+            }
+            led_pattern = patterns[0];
+        case COOLING:
+            // fill left
+            if(patterns[1] == 0b11111111)
+            {
+                patterns[1] = 0b00000001;
+            }
+            else 
+            {
+                patterns[1] <<= 1; 
+                patterns[1] += 1;   
+            }
+            led_pattern = patterns[1];
+        default:
+            // no light
+            led_pattern = patterns[2];
+    }
+
+    write_to_bar();
 
     TB0CCTL0 &= ~CCIFG;     // clear flag
 }
