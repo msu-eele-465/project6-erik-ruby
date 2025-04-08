@@ -7,6 +7,6 @@
 	<connection value="common/targetdb/connections/TIMSP430-USB.xml"/>
 	<createSlaveProjects value=""/>
 	<activeTargetConfiguration value="targetConfigs/MSP430FR2310.ccxml"/>
-	<isTargetConfigurationManual value="true"/>
+	<isTargetConfigurationManual value="false"/>
 	<filesToOpen value=""/>
 </projectOptions>
