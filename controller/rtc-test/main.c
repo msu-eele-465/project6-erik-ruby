@@ -3,15 +3,11 @@
 * @brief Implements LED_status and keypad to operate a pattern-displaying LED bar
 *
 */
-#include <cstdint>
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 
-#include "../src/keypad.h"
-#include "../src/led_status.h"
-#include "/src/lcd.h"
 #include "intrinsics.h"
 #include "msp430fr2355.h"
 
@@ -27,27 +23,8 @@ uint8_t current_idx = 0;            // index of newest recorded values
 uint8_t window_size = 3;            // default window size
 uint8_t adc_flag =0;                 
 
-// global keypad and pk_attempt initialization
-Keypad keypad = {
-    .lock_state = LOCKED,                           // locked is 1
-    .row_pins = {BIT3, BIT2, BIT1, BIT0},      // order is 5, 6, 7, 8
-    .col_pins = {BIT4, BIT5, BIT2, BIT0},    // order is 1, 2, 3, 4
-    .passkey = {'1','1','1','1'},
-};
-
 /**
-* inits pattern transmit
-*/
-void transmit_pattern()
-{
-    tx_byte_cnt = 1;
-    UCB0I2CSA = LED_BAR_ADDR;                            
-    while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
-    UCB0CTLW0 |= UCTR | UCTXSTT;                      // I2C TX, start condition
-}
-
-/**
-* resets the 
+* resets the time
 */
 void reset_time()
 {
@@ -57,73 +34,7 @@ void reset_time()
     UCB0CTLW0 |= UCTR | UCTXSTT;        // I2C TX, start condition
 }
 
-/**
-* sets the lcd mode
-*/
-void transmit_lcd_mode()
-{
 
-    reset_time();               // since we're switching mode, reset rtc time
-}
-
-/**
-*   sets the lcd temps
-*/
-void transmit_lcd_temps()
-{
-
-}
-
-/**
-* sets the lcd time to the received time from the RTC
-*/
-void transmit_lcd_elapsed_time()
-{
-  
-}
-
-/**
-* sets temperature variables to default values
-* window size is user defined
-*/
-void change_n(uint8_t new_window_size)
-{
-    window_size = new_window_size;
-    current_idx = 0;
-}
-
-/**
-* Calculate average temperature
-* send result to LCD
-*/
-void avg_temp(){
-    // round to the nearest tenth
-    int average = total / window_size;
-
-    // convert to Voltage
-    // x/2^12 = reading/3.3 (Digital Num/Scale = AV/Reference)
-    float temp = 0;
-    temp = (((float) average) / 4095.0 ) * 3.3;
-
-    // convert voltage to temp in C
-    temp = (temp - 1.3605) / (-11.77/1000.0);
-
-    char char_arr[3];
-
-    char_arr[0] = ((int) temp / 10) + '0';
-
-    char_arr[1] = ((int) temp % 10) + '0';
-
-    char_arr[2] = ((int)(temp * 10) % 10) + '0';
-
-    int i;
-    for (i = 0; i < 3; i++){
-        cur_char = char_arr[i];
-        transmit_to_lcd();
-        __delay_cycles(1000);
-    }
-    
-}
 
 /**
 * initializes LED 1, Timers, and LED bar ports
@@ -165,7 +76,7 @@ void init(void)
     TB0CCTL0 |= CCIE;           // Enable IRQ
 
     // Timer B1
-    // Math: .5s = (1*10^-6)(D1)(D2)(25k)    D1 = 5, D2 = 4
+    // Math: 1s = (1*10^-6)(D1)(D2)(25k)    D1 = 5, D2 = 4
     TB1CTL |= TBCLR;            // Clear timer and dividers
     TB1CTL |= TBSSEL__SMCLK;    // Source = SMCLK
     TB1CTL |= MC__UP;           // Mode UP
@@ -192,65 +103,13 @@ void init(void)
 
     UCB0CTLW0 &=~ UCSWRST;                            // clear reset register
     UCB0IE |= UCTXIE0 | UCNACKIE | UCRXIE0 | UCBCNTIE;// transmit, receive, TBCNT, and NACK
-    
-    //--- Configure ADC
-    ADCCTL0 &= ~ADCSHT;         // Clear ADCSHT from def. of ADCSHT = 01
-    ADCCTL0 |= ADCSHT_2;        // Conversion Cycles = 16 (ADCSHT = 10)
-    ADCCTL0 |= ADCON;           // Turn ADC ON
-
-    ADCCTL1 |= ADCSSEL_2;       // ADC Clock Source = SMCLK
-    ADCCTL1 |= ADCSHP;          // Sample signal source = sampling timer
-
-    ADCCTL2 &= ~ADCRES;         // Clear ADCRES from def. of ADCRES=01
-    ADCCTL2 |= ADCRES_2;        // Resolution = 12-bit (ADCRES = 10)
-
-    ADCMCTL0 |= ADCINCH_1;      // ADC Input Channel = A2 (P1.1): sends A2 to ADC
-
-    ADCIE |= ADCIE0;            // Enable ADC Conv Complete IRQ
-
 //------------- END PORT SETUP -------------------
 
-    PM5CTL0 &= ~LOCKLPM5;   // turn on GPIO
     __enable_interrupt();   // enable maskable IRQs
-}
+    PM5CTL0 &= ~LOCKLPM5;   // turn on GPIO
 
-void set_state(char state)
-{
-    switch(state)   
-    {
-        case HEAT:                      // set heat pin to 1, cool pin to 0
-            if(ambient_mode)
-            {
-                ambient_mode = 0;
-            }
-            P6OUT |= BIT0;
-            P6OUT &= ~BIT1;
-            break;
-        case COOL:                      // set heat pin to 0, cool pin to 1
-            if(ambient_mode)
-            {
-                ambient_mode = 0;
-            }
-            P6OUT |= BIT0;
-            P6OUT &= ~BIT1;
-            break;
-        case AMBIENT:
-            
-            break;
-        case OFF:                       // set pins to be both 0 V
-            if(ambient_mode)
-            {
-                ambient_mode = 0;
-            }
-            P6OUT &= ~(BIT1 + BIT0);
-            break;
-        default:
-            
-            break;
-    }
-    transmit_pattern();
-}
 
+}
 
 /**
 * Handle character reading and set base multiplier, setting patterns as well
@@ -261,86 +120,16 @@ void set_state(char state)
 */
 int main(void)
 {
-    cur_char = 'Z';
-    int ret = FAILURE;
 
     init();
-    init_keypad(&keypad);
-    set_state(OFF);
-    transmit_lcd_mode();
+    reset_time();
 
     while(true)
     {
-        ret = scan_keypad(&keypad, &cur_char);
-        __delay_cycles(100000);             // Delay for 100000*(1/MCLK)=0.1s
-        if (ret == SUCCESS)
-        {
-            switch(cur_char)
-            {
-                case HEAT:
-                    if(cur_state != HEAT)
-                    {
-                        set_state(HEAT);
-                        transmit_lcd_mode();
-                    }
-                    break;
-                case COOL:
-                    if(cur_state!= COOl)
-                    {
-                        set_state(COOL);
-                        transmit_lcd_mode();
-                    }
-                    break;
-                case AMBIENT:
-                    if(ambient_mode == 0)
-                    {
-                        ambient_mode = 1;
-                        transmit_lcd_mode();
-                    }
-                    break;
-                case OFF:
-                    if(cur_state!= OFF)
-                    {
-                        set_state(OFF);
-                        transmit_lcd_mode();
-                    }
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        if(ambient_mode)
-        {
-            // if cooler than ambient, set to heating mode.
-
-            // if warmer than ambient, set to cooling mode.
-
-            // tolerance of +/- 2 celsius
-        }
-
-        if(avg_temp_flag)
-        {
-            avg_temp();
-            avg_temp_flag = 0;
-        }
-
-        if(adc_flag)
-        { 
-            ADCCTL0 |= ADCENC | ADCSC;
-            adc_flag = 0;
-        }
-
-        // read temperature from LM92
-        if(read_temp_flag)
-        {
-
-            read_temp_flag = 0;
-        }
-
         // send register address of time, read 
         if(read_time_flag)
         {
+            ++total;
             tx_byte_cnt = 1;
             UCB0I2CSA = RTC_ADDR;
             while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
@@ -351,7 +140,13 @@ int main(void)
             UCB0CTLW0 |= UCTXSTT;        // generate START cond.
 
             read_time_flag = 0;
-            transmit_lcd_elapsed_time();
+            
+            if(total == 10)          // every 10s, "change mode"
+            {
+                 __delay_cycles(1000);
+                reset_time();
+                total = 0;
+            }
         }
 
         __delay_cycles(100000);             // Delay for 100000*(1/MCLK)=0.1s
@@ -420,10 +215,7 @@ __interrupt void transmit_data(void)
 __interrupt void heartbeat_LED(void)
 {
     P1OUT ^= BIT0;          // LED1 xOR
-    if(cur_state != OFF)
-    {
-        read_time_flag = 1;
-    }
+    read_time_flag = 1;
     TB1CCTL0 &= ~CCIFG;     // clear flag
 }
 // ----- end heartbeat_LED-----
@@ -438,27 +230,4 @@ __interrupt void read_temps(void)
     adc_flag = 1;
     read_temp_flag = 1;
     TB1CCTL1 &= ~CCIFG;     // clear flag
-}
-
-/**
-* Read temperature value from ADC
-*/
-#pragma vector = ADC_VECTOR
-__interrupt void record_av(void)
-{
-    // save to current index
-    temp_buffer[current_idx] = ADCMEM0;
-    ++current_idx;
-    if(current_idx == window_size)
-    {
-        current_idx = 0;
-        total = 0;
-        
-        uint8_t i;
-        for(i = 0; i < window_size; ++i)
-        {
-            total += temp_buffer[i];
-        }
-        avg_temp_flag = 1;
-    }
 }
