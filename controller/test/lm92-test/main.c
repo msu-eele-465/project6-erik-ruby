@@ -277,6 +277,11 @@ int main(void)
     {
         ret = scan_keypad(&keypad, &cur_char);
         __delay_cycles(100000);             // Delay for 100000*(1/MCLK)=0.1s
+        if(simulated_return)
+        {
+            ret = SUCCESS;
+            cur_char = COOL;
+        }
         if (ret == SUCCESS)
         {
             switch(cur_char)
@@ -344,9 +349,13 @@ int main(void)
         // read temperature from LM92
         if(read_temp_flag)
         {
+            UCB0TBCNT = 1;
+            UCB0I2CSA = LM92_ADDR;
+            while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
+            UCB0CTLW0 |= UCTR | UCTXSTT;                      // I2C TX, start condition
+            __delay_cycles(1000);
             while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
             UCB0TBCNT = 2;
-            UCB0I2CSA = LM92_ADDR;
 
             UCB0CTLW0 &= ~UCTR;          // Put into Rx mode
             UCB0CTLW0 |= UCTXSTT;        // generate START cond.
@@ -426,7 +435,7 @@ __interrupt void transmit_data(void)
             else 
             {
                 lm92_temp = UCB0RXBUF;
-                lm92_temp <<= 4;
+                lm92_temp <<= 8;
             }
         }
         else 
