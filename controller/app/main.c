@@ -3,7 +3,6 @@
 * @brief Implements LED_status and keypad to operate a pattern-displaying LED bar
 *
 */
-#include <cstdint>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -12,16 +11,19 @@
 #include "../src/led_status.h"
 #include "/src/lcd.h"
 #include "intrinsics.h"
+#include "msp430fr2310.h"
 #include "msp430fr2355.h"
 
 
 uint8_t current_pattern = 0, tx_byte_cnt = 0, avg_temp_flag = 0, cur_sec_elapsed, cur_min_elapsed, ambient_mode = 0, read_temp_flag = 0, read_time_flag = 0, read_sec = 0;
 const uint8_t LED_BAR_ADDR = 0x0A, LM92_ADDR = 0b01001000, RTC_ADDR = 0x68;
 char cur_char, cur_state; 
+float lm92_temp_float = 0, lm19_temp= 0;
 
 // initialize temperature variables
 unsigned int temp_buffer[9];        // maximum window is 9
 unsigned int total = 0;             // walking total of buffer values
+uint16_t lm92_temp = 0;
 uint8_t current_idx = 0;            // index of newest recorded values
 uint8_t window_size = 3;            // default window size
 uint8_t adc_flag =0;                 
@@ -70,7 +72,9 @@ void transmit_lcd_mode()
 */
 void transmit_lcd_temps()
 {
+    lm92_temp_float = ((float)lm92_temp) * .0625;
 
+    lm92_temp = 0;
 }
 
 /**
@@ -106,6 +110,7 @@ void avg_temp(){
 
     // convert voltage to temp in C
     temp = (temp - 1.3605) / (-11.77/1000.0);
+    lm19_temp = temp;
 
     char char_arr[3];
 
@@ -312,10 +317,16 @@ int main(void)
         if(ambient_mode)
         {
             // if cooler than ambient, set to heating mode.
-
-            // if warmer than ambient, set to cooling mode.
-
             // tolerance of +/- 2 celsius
+            if(lm92_temp_float < lm19_temp - 2)
+            {
+                set_state(HEAT);
+            }
+            // if warmer than ambient, set to cooling mode.
+            else if (lm92_temp_float > lm19_temp + 2)
+            {
+                set_state(COOL);
+            }            
         }
 
         if(avg_temp_flag)
@@ -333,8 +344,20 @@ int main(void)
         // read temperature from LM92
         if(read_temp_flag)
         {
+            UCB0TBCNT = 1;
+            UCB0I2CSA = LM92_ADDR;
+            while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
+            UCB0CTLW0 |= UCTR | UCTXSTT;                      // I2C TX, start condition
+            __delay_cycles(1000);
+            while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
+            UCB0TBCNT = 2;
+
+            UCB0CTLW0 &= ~UCTR;          // Put into Rx mode
+            UCB0CTLW0 |= UCTXSTT;        // generate START cond.
 
             read_temp_flag = 0;
+
+            transmit_lcd_temps();
         }
 
         // send register address of time, read 
@@ -398,15 +421,30 @@ __interrupt void transmit_data(void)
         }
         break;
     case USCI_I2C_UCRXIFG0:                 // ID 0x16: Rx IFG
-        if(read_sec)
+        if(UCB0I2CSA == LM92_ADDR)
         {
-            cur_min_elapsed = UCB0RXBUF; 
-            read_sec = 0;   
+            if(lm92_temp != 0)
+            {
+                lm92_temp |= UCB0RXBUF;
+            }
+            else 
+            {
+                lm92_temp = UCB0RXBUF;
+                lm92_temp <<= 8;
+            }
         }
         else 
         {
-            cur_sec_elapsed = UCB0RXBUF;
-            ++read_sec;
+            if(read_sec)
+            {
+                cur_min_elapsed = UCB0RXBUF; 
+                read_sec = 0;   
+            }
+            else 
+            {
+                cur_sec_elapsed = UCB0RXBUF;
+                ++read_sec;
+            }
         }
         break;                                    
     default:
