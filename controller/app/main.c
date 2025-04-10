@@ -8,10 +8,8 @@
 #include <stdio.h>
 
 #include "../src/keypad.h"
-#include "../src/led_status.h"
-#include "/src/lcd.h"
+#include "../src/lcd.h"
 #include "intrinsics.h"
-#include "msp430fr2310.h"
 #include "msp430fr2355.h"
 
 
@@ -61,9 +59,9 @@ void reset_time()
 /**
 * sets the lcd mode
 */
-void transmit_lcd_mode()
+void transmit_lcd_mode(uint8_t mode)
 {
-
+    send_lcd_mode(mode);
     reset_time();               // since we're switching mode, reset rtc time
 }
 
@@ -123,7 +121,13 @@ void avg_temp(){
     int i;
     for (i = 0; i < 3; i++){
         cur_char = char_arr[i];
-        transmit_to_lcd();
+        /* TODO 
+         * determine if ambient avg temp or plant temp was calculated
+         * THIS FUNCTION WILL NOT WORK CORRECTLY!!!
+         * Gotta make this chunky so we see it later
+         * Definitely going to forget about it though...
+         * anyway, the set temperature functions can take in the char array
+         * so we don't have to set it ourselves later */
         __delay_cycles(1000);
     }
     
@@ -271,7 +275,7 @@ int main(void)
     init();
     init_keypad(&keypad);
     set_state(OFF);
-    transmit_lcd_mode();                    // resets time too
+    transmit_lcd_mode(3);                    // resets time too
 
     while(1)
     {
@@ -285,28 +289,28 @@ int main(void)
                     if(cur_state != HEAT)
                     {
                         set_state(HEAT);
-                        transmit_lcd_mode();
+                        transmit_lcd_mode(0);
                     }
                     break;
                 case COOL:
-                    if(cur_state!= COOl)
+                    if(cur_state!= COOL)
                     {
                         set_state(COOL);
-                        transmit_lcd_mode();
+                        transmit_lcd_mode(1);
                     }
                     break;
                 case AMBIENT:
                     if(ambient_mode == 0)
                     {
                         ambient_mode = 1;
-                        transmit_lcd_mode();
+                        transmit_lcd_mode(2);
                     }
                     break;
                 case OFF:
                     if(cur_state!= OFF)
                     {
                         set_state(OFF);
-                        transmit_lcd_mode();
+                        transmit_lcd_mode(3);
                     }
                     break;
                 default:
@@ -380,7 +384,7 @@ int main(void)
             {
                 __delay_cycles(1000);
                 set_state(OFF);
-                transmit_lcd_mode();
+                transmit_lcd_mode(3);
             }
             transmit_lcd_elapsed_time();
         }

@@ -56,7 +56,7 @@ void lcd_send_string(char *str);
 /**
 * set elapsed time in seconds
 * 
-* @param data: time in seconds (must be converted )
+* @param data: time in seconds 
 */
 void lcd_set_time(int *data);
 
@@ -65,7 +65,7 @@ void lcd_set_time(int *data);
 * @param mode : using ambient or plant temp
 * @param data : array for temp
 */
-void lcd_set_temperature(uint8_t mode, char *data);
+void lcd_set_temperature(uint8_t mode, uint8_t *data);
 
 /**
 * toggle cursor on lcd

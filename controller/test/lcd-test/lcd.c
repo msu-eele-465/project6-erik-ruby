@@ -9,11 +9,11 @@
 
 
 uint8_t state_flag;         // 0 = just update temp, 1 = pattern, 2 = window
-uint8_t current_temp_digit;
+uint8_t current_temp_digit, current_mode, temp_unit;
 uint8_t change_allowed;   // flag to tell if the incoming data is allowed to change window size or n
 
 char *lcd_strings[] = {
-    "heat    ", "cool    ", "match   ", "off     "};
+    "heat", "cool", "match", "set", "off"};
 char *ambient_str = "A:xx.x";
 char *plant_str = "P:xx.x";
 char *time_n = "N xxxs";
@@ -24,6 +24,8 @@ void init_lcd(){
 
     state_flag = 0;
     current_temp_digit = 0;
+    current_mode = 4;                      // "off"
+    temp_unit = 'C';
     change_allowed = 0;
 
     PM5CTL0 &= ~LOCKLPM5;
@@ -67,11 +69,11 @@ void lcd_send_string(char *str){
     }
 }
 
-void send_lcd_mode(uint8_t mode)
+void lcd_disp_pattern()
 {
-    lcd_send_command(LCD_RETURN_HOME);
+    lcd_clear_line(LCD_RETURN_HOME);
     DELAY_0001;
-    lcd_send_string((char*)lcd_strings[mode]);
+    lcd_send_string((char*)lcd_strings[current_mode]);
 }
 
 void lcd_set_time(int *data)
@@ -85,7 +87,7 @@ void lcd_set_time(int *data)
     lcd_send_string(time_n);
 }
 
-void lcd_set_temperature(uint8_t mode, char *data)
+void lcd_set_temperature(uint8_t mode, uint8_t *data)
 {    
     if (mode) {
         // plant temp
