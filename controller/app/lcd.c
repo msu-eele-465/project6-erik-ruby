@@ -19,8 +19,8 @@ char *plant_str = "P:xx.x";
 char *time_n = "N xxxs";
 
 void init_lcd(){
-    P1DIR |= BIT0 | BIT1 | BIT4 | BIT5 | BIT6 | BIT7;       // EN, RS, DB4, DB5, DB6, DB7
-    P1OUT &= ~(BIT0 | BIT1 | BIT4 | BIT5 | BIT6 | BIT7);    // Clear outputs
+    P3DIR |= BIT0 | BIT1 | BIT4 | BIT5 | BIT6 | BIT7;       // EN, RS, DB4, DB5, DB6, DB7
+    P3OUT &= ~(BIT0 | BIT1 | BIT4 | BIT5 | BIT6 | BIT7);    // Clear outputs
 
     state_flag = 0;
     current_temp_digit = 0;
@@ -44,21 +44,21 @@ void init_lcd(){
 
 void lcd_send(uint8_t data, uint8_t is_data){
     if (is_data)
-        P1OUT |= BIT1;        // RS = 1 for data
+        P3OUT |= BIT1;        // RS = 1 for data
     else
-        P1OUT &= ~BIT1;       // RS = 0 for command
+        P3OUT &= ~BIT1;       // RS = 0 for command
 
-    P1OUT = (data & 0xF0);    // Send high nibble (on P1.4-7)
-    P1OUT |= BIT0;            // Enable pulse
+    P3OUT = (data & 0xF0);    // Send high nibble (on P3.4-7)
+    P3OUT |= BIT0;            // Enable pulse
     DELAY_0001;
-    P1OUT &= ~BIT0;
+    P3OUT &= ~BIT0;
 
     DELAY_0001;
-    P1OUT = ((data << 4) & 0xF0);
-    if (is_data) P1OUT |= BIT1;   // Re-set RS again if needed (optional)
-    P1OUT |= BIT0;
+    P3OUT = ((data << 4) & 0xF0);
+    if (is_data) P3OUT |= BIT1;   // Re-set RS again if needed (optional)
+    P3OUT |= BIT0;
     DELAY_0001;
-    P1OUT &= ~BIT0;
+    P3OUT &= ~BIT0;
 }
 
 void lcd_send_string(char *str){
@@ -114,32 +114,32 @@ void lcd_set_temperature(uint8_t mode, char *data)
 
 
 void lcd_set_function(){
-    P1OUT &= ~BIT1;                 // RS = 0 for command
-    P1OUT = (0x03 << 4);            // Send high nibble
-    P1OUT |= BIT0;                  // Enable pulse
+    P3OUT &= ~BIT1;                 // RS = 0 for command
+    P3OUT = (0x03 << 4);            // Send high nibble
+    P3OUT |= BIT0;                  // Enable pulse
     DELAY_0001;
-    P1OUT &= ~BIT0;
+    P3OUT &= ~BIT0;
 
     __delay_cycles(30000);
 
-    P1OUT = (0x03 << 4);            // Send high nibble
-    P1OUT |= BIT0;                  // Enable pulse
+    P3OUT = (0x03 << 4);            // Send high nibble
+    P3OUT |= BIT0;                  // Enable pulse
     DELAY_0001;
-    P1OUT &= ~BIT0;
+    P3OUT &= ~BIT0;
 
     __delay_cycles(30000);
 
-    P1OUT = (0x03 << 4);          // Send high nibble
-    P1OUT |= BIT0;                  // Enable pulse
+    P3OUT = (0x03 << 4);          // Send high nibble
+    P3OUT |= BIT0;                  // Enable pulse
     DELAY_0001;
-    P1OUT &= ~BIT0;
+    P3OUT &= ~BIT0;
 
     __delay_cycles(30000);
 
-    P1OUT = (0x02 << 4);    // Send low nibble
-    P1OUT |= BIT0;
+    P3OUT = (0x02 << 4);    // Send low nibble
+    P3OUT |= BIT0;
     DELAY_0001;
-    P1OUT &= ~BIT0;
+    P3OUT &= ~BIT0;
 
     lcd_send_command(LCD_FUNCTION);
 }
