@@ -5,7 +5,6 @@
 */
 #include <cstdint>
 #include <math.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -16,8 +15,8 @@
 #include "msp430fr2355.h"
 
 
-uint8_t current_pattern = 0, tx_byte_cnt = 0, avg_temp_flag = 0, cur_sec_elapsed, cur_min_elapsed ambient_mode = 0, read_temp_flag = 0, read_time_flag = 0, read_sec = 0;
-const uint8_t LED_BAR_ADDR = 0x0A, LM92_ADDR = 0b01001000, RTC_ADDR = 0x48;
+uint8_t current_pattern = 0, tx_byte_cnt = 0, avg_temp_flag = 0, cur_sec_elapsed, cur_min_elapsed, ambient_mode = 0, read_temp_flag = 0, read_time_flag = 0, read_sec = 0;
+const uint8_t LED_BAR_ADDR = 0x0A, LM92_ADDR = 0b01001000, RTC_ADDR = 0x68;
 char cur_char, cur_state; 
 
 // initialize temperature variables
@@ -40,7 +39,7 @@ Keypad keypad = {
 */
 void transmit_pattern()
 {
-    tx_byte_cnt = 1;
+    UCB0TBCNT = 1;
     UCB0I2CSA = LED_BAR_ADDR;                            
     while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
     UCB0CTLW0 |= UCTR | UCTXSTT;                      // I2C TX, start condition
@@ -51,7 +50,7 @@ void transmit_pattern()
 */
 void reset_time()
 {
-    tx_byte_cnt = 3;                    // send 3 0s (reg addr, sec, minutes)
+    UCB0TBCNT = 3;                    // send 3 0s (reg addr, sec, minutes)
     UCB0I2CSA = RTC_ADDR;                            
     while (UCB0CTLW0 & UCTXSTP);        // Ensure stop condition got sent
     UCB0CTLW0 |= UCTR | UCTXSTT;        // I2C TX, start condition
@@ -79,7 +78,7 @@ void transmit_lcd_temps()
 */
 void transmit_lcd_elapsed_time()
 {
-  
+    // multiply minutes by 60 and add to seconds to get 3 digits
 }
 
 /**
@@ -165,7 +164,7 @@ void init(void)
     TB0CCTL0 |= CCIE;           // Enable IRQ
 
     // Timer B1
-    // Math: 1s = (1*10^-6)(D1)(D2)(25k)    D1 = 5, D2 = 4
+    // Math: .5s = (1*10^-6)(D1)(D2)(25k)    D1 = 5, D2 = 4
     TB1CTL |= TBCLR;            // Clear timer and dividers
     TB1CTL |= TBSSEL__SMCLK;    // Source = SMCLK
     TB1CTL |= MC__UP;           // Mode UP
@@ -210,10 +209,8 @@ void init(void)
 
 //------------- END PORT SETUP -------------------
 
-    __enable_interrupt();   // enable maskable IRQs
     PM5CTL0 &= ~LOCKLPM5;   // turn on GPIO
-
-
+    __enable_interrupt();   // enable maskable IRQs
 }
 
 void set_state(char state)
@@ -269,9 +266,9 @@ int main(void)
     init();
     init_keypad(&keypad);
     set_state(OFF);
-    transmit_lcd_mode();
+    transmit_lcd_mode();                    // resets time too
 
-    while(true)
+    while(1)
     {
         ret = scan_keypad(&keypad, &cur_char);
         __delay_cycles(100000);             // Delay for 100000*(1/MCLK)=0.1s
@@ -343,16 +340,25 @@ int main(void)
         // send register address of time, read 
         if(read_time_flag)
         {
-            tx_byte_cnt = 1;
+            UCB0TBCNT = 1;
             UCB0I2CSA = RTC_ADDR;
             while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
             UCB0CTLW0 |= UCTR | UCTXSTT;                      // I2C TX, start condition
             __delay_cycles(1000);
             while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
+            UCB0TBCNT = 2;
+
             UCB0CTLW0 &= ~UCTR;          // Put into Rx mode
             UCB0CTLW0 |= UCTXSTT;        // generate START cond.
 
             read_time_flag = 0;
+            
+            if(cur_min_elapsed > 4)          // after 300s (5 min), turn off
+            {
+                __delay_cycles(1000);
+                set_state(OFF);
+                transmit_lcd_mode();
+            }
             transmit_lcd_elapsed_time();
         }
 
@@ -377,24 +383,19 @@ __interrupt void transmit_data(void)
         UCB0CTL1 |= UCTXSTT;                      //resend start if NACK
         break;                                      // Vector 4: NACKIFG break
     case USCI_I2C_UCTXIFG0:
-        if (tx_byte_cnt)                                // Check TX byte counter
+        if(UCB0I2CSA == LED_BAR_ADDR)
         {
-            if(UCB0I2CSA == LED_BAR_ADDR)
-            {
-                UCB0TXBUF = current_pattern;            // Load TX buffer
-            }
-            else if(UCB0I2CSA == RTC_ADDR)
-            {
-                // register address begins at 0, then we set sec and min to 0
-                UCB0TXBUF = 0;                          
-            }
-            tx_byte_cnt--;                              // Decrement TX byte counter
+            UCB0TXBUF = current_pattern;            // Load TX buffer
         }
-        else
+        else if(UCB0I2CSA == RTC_ADDR)
         {
-            UCB0CTLW0 |= UCTXSTP;                     // I2C stop condition
-            UCB0IFG &= ~UCTXIFG;                      // Clear USCI_B0 TX int flag
-        } 
+            // register address begins at 0, then we set sec and min to 0
+            UCB0TXBUF = 0;                          
+        }
+        else        // LM92
+        {
+        
+        }
         break;
     case USCI_I2C_UCRXIFG0:                 // ID 0x16: Rx IFG
         if(read_sec)
