@@ -8,8 +8,10 @@
 #include <stdio.h>
 
 #include "../src/keypad.h"
-#include "../src/lcd.h"
+#include "../src/led_status.h"
+#include "/src/lcd.h"
 #include "intrinsics.h"
+#include "msp430fr2310.h"
 #include "msp430fr2355.h"
 
 
@@ -59,9 +61,9 @@ void reset_time()
 /**
 * sets the lcd mode
 */
-void transmit_lcd_mode(uint8_t mode)
+void transmit_lcd_mode()
 {
-    send_lcd_mode(mode);
+
     reset_time();               // since we're switching mode, reset rtc time
 }
 
@@ -121,13 +123,7 @@ void avg_temp(){
     int i;
     for (i = 0; i < 3; i++){
         cur_char = char_arr[i];
-        /* TODO 
-         * determine if ambient avg temp or plant temp was calculated
-         * THIS FUNCTION WILL NOT WORK CORRECTLY!!!
-         * Gotta make this chunky so we see it later
-         * Definitely going to forget about it though...
-         * anyway, the set temperature functions can take in the char array
-         * so we don't have to set it ourselves later */
+        transmit_to_lcd();
         __delay_cycles(1000);
     }
     
@@ -275,12 +271,17 @@ int main(void)
     init();
     init_keypad(&keypad);
     set_state(OFF);
-    transmit_lcd_mode(3);                    // resets time too
+    transmit_lcd_mode();                    // resets time too
 
     while(1)
     {
         ret = scan_keypad(&keypad, &cur_char);
         __delay_cycles(100000);             // Delay for 100000*(1/MCLK)=0.1s
+        if(simulated_return)
+        {
+            ret = SUCCESS;
+            cur_char = COOL;
+        }
         if (ret == SUCCESS)
         {
             switch(cur_char)
@@ -289,28 +290,28 @@ int main(void)
                     if(cur_state != HEAT)
                     {
                         set_state(HEAT);
-                        transmit_lcd_mode(0);
+                        transmit_lcd_mode();
                     }
                     break;
                 case COOL:
-                    if(cur_state!= COOL)
+                    if(cur_state!= COOl)
                     {
                         set_state(COOL);
-                        transmit_lcd_mode(1);
+                        transmit_lcd_mode();
                     }
                     break;
                 case AMBIENT:
                     if(ambient_mode == 0)
                     {
                         ambient_mode = 1;
-                        transmit_lcd_mode(2);
+                        transmit_lcd_mode();
                     }
                     break;
                 case OFF:
                     if(cur_state!= OFF)
                     {
                         set_state(OFF);
-                        transmit_lcd_mode(3);
+                        transmit_lcd_mode();
                     }
                     break;
                 default:
@@ -348,9 +349,13 @@ int main(void)
         // read temperature from LM92
         if(read_temp_flag)
         {
+            UCB0TBCNT = 1;
+            UCB0I2CSA = LM92_ADDR;
+            while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
+            UCB0CTLW0 |= UCTR | UCTXSTT;                      // I2C TX, start condition
+            __delay_cycles(1000);
             while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
             UCB0TBCNT = 2;
-            UCB0I2CSA = LM92_ADDR;
 
             UCB0CTLW0 &= ~UCTR;          // Put into Rx mode
             UCB0CTLW0 |= UCTXSTT;        // generate START cond.
@@ -380,7 +385,7 @@ int main(void)
             {
                 __delay_cycles(1000);
                 set_state(OFF);
-                transmit_lcd_mode(3);
+                transmit_lcd_mode();
             }
             transmit_lcd_elapsed_time();
         }
@@ -430,7 +435,7 @@ __interrupt void transmit_data(void)
             else 
             {
                 lm92_temp = UCB0RXBUF;
-                lm92_temp <<= 4;
+                lm92_temp <<= 8;
             }
         }
         else 
