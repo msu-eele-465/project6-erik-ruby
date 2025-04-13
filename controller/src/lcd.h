@@ -65,7 +65,7 @@ void lcd_set_time(int *data);
 * @param mode : using ambient or plant temp
 * @param data : array for temp
 */
-void lcd_set_temperature(uint8_t mode, char *data);
+void lcd_set_temperature(uint8_t mode, int *data);
 
 /**
 * toggle cursor on lcd

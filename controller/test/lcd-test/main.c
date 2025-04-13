@@ -10,6 +10,7 @@
 #include "lcd.h"
 #include "intrinsics.h"
 #include "msp430fr2355.h"
+#include "src/lcd.h"
 
 /**
 * initializes LED 1, Timers, and LED bar ports
@@ -97,6 +98,8 @@ void init(void)
 
     PM5CTL0 &= ~LOCKLPM5;   // turn on GPIO
     __enable_interrupt();   // enable maskable IRQs
+
+    init_lcd();
 }
 
 
@@ -109,16 +112,17 @@ void init(void)
 */
 int main(void)
 {
+    int i;
+    int test_vals[] = {1, 2, 3};
+    init();
     while(1)
     {
-        send_lcd_mode(0);
-        __delay_cycles(500000);             // Delay for 100000*(1/MCLK)=0.1s
         send_lcd_mode(1);
-        __delay_cycles(500000);             // Delay for 100000*(1/MCLK)=0.1s
-        send_lcd_mode(2);
-        __delay_cycles(500000);             // Delay for 100000*(1/MCLK)=0.1s
-        send_lcd_mode(3);
-        __delay_cycles(500000);             // Delay for 100000*(1/MCLK)=0.1s
+
+        set_temperature_ambient(test_vals);
+        set_temperature_plant(test_vals);
+
+        lcd_set_time(test_vals);
     }
 
     return(0);
