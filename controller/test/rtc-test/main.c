@@ -1,10 +1,9 @@
 /**
 * @file
-* @brief Implements LED_status and keypad to operate a pattern-displaying LED bar
+* @brief TESTS LM92 bar
 *
 */
 #include <math.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -15,21 +14,23 @@
 uint8_t current_pattern = 0, tx_byte_cnt = 0, avg_temp_flag = 0, cur_sec_elapsed, cur_min_elapsed, ambient_mode = 0, read_temp_flag = 0, read_time_flag = 0, read_sec = 0;
 const uint8_t LED_BAR_ADDR = 0x0A, LM92_ADDR = 0b01001000, RTC_ADDR = 0x68;
 char cur_char, cur_state; 
+float lm92_temp_float = 0, lm19_temp= 0;
 
 // initialize temperature variables
 unsigned int temp_buffer[9];        // maximum window is 9
 unsigned int total = 0;             // walking total of buffer values
+uint16_t lm92_temp = 0;
 uint8_t current_idx = 0;            // index of newest recorded values
 uint8_t window_size = 3;            // default window size
-uint8_t adc_flag =0;                 
+uint8_t adc_flag =0;             
 
 /**
 * resets the time
 */
 void reset_time()
 {
-    tx_byte_cnt = 3;                    // send 3 0s (reg addr, sec, minutes)
-    UCB0I2CSA = RTC_ADDR;                            
+    UCB0TBCNT = 3;                   // send 3 0s (reg addr, sec, minutes)
+    // UCB0I2CSA = RTC_ADDR;                            
     while (UCB0CTLW0 & UCTXSTP);        // Ensure stop condition got sent
     UCB0CTLW0 |= UCTR | UCTXSTT;        // I2C TX, start condition
 }
@@ -97,11 +98,12 @@ void init(void)
     UCB0CTLW0 |= UCSWRST;                             // put eUSCI_B in reset state
     UCB0CTLW0 |= UCMODE_3 | UCMST;                    // I2C master mode, SMCLK
     UCB0CTLW1 |= UCASTP_2;                            // Automatic stop after hit TBCNT
-    UCB0I2CSA = LED_BAR_ADDR;                         // configure slave address
+    UCB0I2CSA = LM92_ADDR;                         // configure slave address
     UCB0BRW = 0x8;                                    // baudrate = SMCLK / 8
     UCB0TBCNT = 2;                                    // num bytes to recieve
 
     UCB0CTLW0 &=~ UCSWRST;                            // clear reset register
+    // UCB0IE |= UCTXIE0 | UCNACKIE;
     UCB0IE |= UCTXIE0 | UCNACKIE | UCRXIE0 | UCBCNTIE;// transmit, receive, TBCNT, and NACK
 //------------- END PORT SETUP -------------------
 
@@ -122,32 +124,58 @@ int main(void)
 {
 
     init();
-    reset_time();
+    // reset_time();
 
-    while(true)
+
+    while(1)
     {
         // send register address of time, read 
         if(read_time_flag)
         {
             ++total;
-            tx_byte_cnt = 1;
+            UCB0TBCNT = 1;
             UCB0I2CSA = RTC_ADDR;
             while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
             UCB0CTLW0 |= UCTR | UCTXSTT;                      // I2C TX, start condition
             __delay_cycles(1000);
             while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
+            UCB0TBCNT = 2;
+
             UCB0CTLW0 &= ~UCTR;          // Put into Rx mode
             UCB0CTLW0 |= UCTXSTT;        // generate START cond.
 
             read_time_flag = 0;
             
-            if(total == 10)          // every 10s, "change mode"
+            if(total == 100)          // every 100s, "change mode"
             {
                  __delay_cycles(1000);
                 reset_time();
                 total = 0;
             }
         }
+
+        // read temperature from LM92
+        if(read_temp_flag)
+        {
+            while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
+            UCB0I2CSA = LM92_ADDR;
+            UCB0TBCNT = 2;
+
+            UCB0CTLW0 &= ~UCTR;          // Put into Rx mode
+            UCB0CTLW0 |= UCTXSTT;        // generate START cond.
+
+            read_temp_flag = 0;
+            __delay_cycles(10000);
+            lm92_temp = 0;
+
+            // transmit_lcd_temps();
+        }
+
+        // if(send_time_flag)
+        // {
+        //     reset_time();
+        //     send_time_flag = 0;
+        // }
 
         __delay_cycles(100000);             // Delay for 100000*(1/MCLK)=0.1s
     }
@@ -170,37 +198,36 @@ __interrupt void transmit_data(void)
         UCB0CTL1 |= UCTXSTT;                      //resend start if NACK
         break;                                      // Vector 4: NACKIFG break
     case USCI_I2C_UCTXIFG0:
-        if (tx_byte_cnt)                                // Check TX byte counter
-        {
-            if(UCB0I2CSA == LED_BAR_ADDR)
-            {
-                UCB0TXBUF = current_pattern;            // Load TX buffer
-            }
-            else if(UCB0I2CSA == RTC_ADDR)
-            {
-                // register address begins at 0, then we set sec and min to 0
-                UCB0TXBUF = 0;                          
-            }
-            tx_byte_cnt--;                              // Decrement TX byte counter
-        }
-        else
-        {
-            UCB0CTLW0 |= UCTXSTP;                     // I2C stop condition
-            UCB0IFG &= ~UCTXIFG;                      // Clear USCI_B0 TX int flag
-        } 
-        break;
+        // register address begins at 0, then we set sec and min to 0
+        UCB0TXBUF = 0;                          
+        break;   
     case USCI_I2C_UCRXIFG0:                 // ID 0x16: Rx IFG
-        if(read_sec)
+        if(UCB0I2CSA == LM92_ADDR)
         {
-            cur_min_elapsed = UCB0RXBUF; 
-            read_sec = 0;   
+            if(lm92_temp != 0)
+            {
+                lm92_temp |= UCB0RXBUF;
+            }
+            else 
+            {
+                lm92_temp = UCB0RXBUF;
+                lm92_temp <<= 4;
+            }
         }
         else 
         {
-            cur_sec_elapsed = UCB0RXBUF;
-            ++read_sec;
+            if(read_sec)
+            {
+                cur_min_elapsed = UCB0RXBUF; 
+                read_sec = 0;   
+            }
+            else 
+            {
+                cur_sec_elapsed = UCB0RXBUF;
+                ++read_sec;
+            }
         }
-        break;                                    
+        break;                                               
     default:
         break;
     }
@@ -215,7 +242,8 @@ __interrupt void transmit_data(void)
 __interrupt void heartbeat_LED(void)
 {
     P1OUT ^= BIT0;          // LED1 xOR
-    read_time_flag = 1;
+    // read_time_flag = 1;
+    read_temp_flag = 1;
     TB1CCTL0 &= ~CCIFG;     // clear flag
 }
 // ----- end heartbeat_LED-----
@@ -227,7 +255,6 @@ __interrupt void heartbeat_LED(void)
 __interrupt void read_temps(void)
 {
     P6OUT ^= BIT6;
-    adc_flag = 1;
-    read_temp_flag = 1;
+    // adc_flag = 1;
     TB1CCTL1 &= ~CCIFG;     // clear flag
 }
