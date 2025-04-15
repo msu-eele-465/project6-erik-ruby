@@ -13,7 +13,7 @@
 #include "msp430fr2355.h"
 
 
-uint8_t current_pattern = 0, tx_byte_cnt = 0, avg_temp_flag = 0, cur_sec_elapsed, cur_min_elapsed, ambient_mode = 0, read_temp_flag = 0, read_time_flag = 0, read_sec = 0;
+uint8_t current_pattern = 0, tx_byte_cnt = 0, avg_temp_flag = 0, cur_sec_elapsed, cur_min_elapsed, ambient_mode = 0, read_temp_flag = 0, read_time_flag = 0, read_sec = 0, has_readt = 0;
 const uint8_t LED_BAR_ADDR = 0x0A, LM92_ADDR = 0b01001000, RTC_ADDR = 0x68;
 char cur_char, cur_state; 
 float lm92_temp_float = 0, lm19_temp= 0;
@@ -54,6 +54,10 @@ void reset_time()
     UCB0I2CSA = RTC_ADDR;                            
     while (UCB0CTLW0 & UCTXSTP);        // Ensure stop condition got sent
     UCB0CTLW0 |= UCTR | UCTXSTT;        // I2C TX, start condition
+    int reset[] = {0,0,0};
+    lcd_set_time(reset);
+    cur_min_elapsed = 0;
+    cur_sec_elapsed = 0;
 }
 
 /**
@@ -66,21 +70,20 @@ void transmit_lcd_mode(uint8_t mode)
 }
 
 /**
-*   sets the lcd temps
-*/
-void transmit_lcd_temps()
-{
-    lm92_temp_float = ((float)lm92_temp) * .0625;
-
-    lm92_temp = 0;
-}
-
-/**
 * sets the lcd time to the received time from the RTC
 */
 void transmit_lcd_elapsed_time()
 {
+    uint8_t time_arr[3];
     // multiply minutes by 60 and add to seconds to get 3 digits
+    int total_sec = cur_min_elapsed * 60;
+    total_sec = total_sec + cur_sec_elapsed;
+
+    time_arr[0] = total_sec / 100;
+    time_arr[1] = (total_sec / 100) % 10;
+    time_arr[2] = total_sec % 10;
+
+    lcd_set_time(time_arr);
 }
 
 /**
@@ -91,6 +94,7 @@ void change_n(uint8_t new_window_size)
 {
     window_size = new_window_size;
     current_idx = 0;
+    has_readt = 0;
 }
 
 /**
@@ -110,26 +114,15 @@ void avg_temp(){
     temp = (temp - 1.3605) / (-11.77/1000.0);
     lm19_temp = temp;
 
-    char char_arr[3];
+    int int_arr[3];
 
-    char_arr[0] = ((int) temp / 10) + '0';
+    int_arr[0] = ((int) temp / 10);
 
-    char_arr[1] = ((int) temp % 10) + '0';
+    int_arr[1] = ((int) temp % 10);
 
-    char_arr[2] = ((int)(temp * 10) % 10) + '0';
+    int_arr[2] = ((int)(temp * 10) % 10);
 
-    int i;
-    for (i = 0; i < 3; i++){
-        cur_char = char_arr[i];
-        /* TODO 
-         * determine if ambient avg temp or plant temp was calculated
-         * THIS FUNCTION WILL NOT WORK CORRECTLY!!!
-         * Gotta make this chunky so we see it later
-         * Definitely going to forget about it though...
-         * anyway, the set temperature functions can take in the char array
-         * so we don't have to set it ourselves later */
-        __delay_cycles(1000);
-    }
+    set_temperature_ambient(int_arr);
     
 }
 
@@ -357,7 +350,15 @@ int main(void)
 
             read_temp_flag = 0;
 
-            transmit_lcd_temps();
+            lm92_temp_float = ((float)lm92_temp) * .0625;
+
+            int int_arr[3];
+            int_arr[0] = ((int) lm92_temp_float / 10);
+            int_arr[1] = ((int) lm92_temp_float % 10);
+            int_arr[2] = ((int)(lm92_temp_float * 10) % 10);
+            set_temperature_plant(int_arr);
+
+            lm92_temp = 0;
         }
 
         // send register address of time, read 
@@ -490,7 +491,7 @@ __interrupt void record_av(void)
     // save to current index
     temp_buffer[current_idx] = ADCMEM0;
     ++current_idx;
-    if(current_idx == window_size)
+    if((current_idx == window_size) && (has_readt == 0))
     {
         current_idx = 0;
         total = 0;
@@ -501,5 +502,18 @@ __interrupt void record_av(void)
             total += temp_buffer[i];
         }
         avg_temp_flag = 1;
+    }
+    else if (has_readt == 1) {
+        total = 0;
+        uint8_t i;
+        for(i = 0; i < window_size; ++i)
+        {
+            total += temp_buffer[i];
+        }
+        avg_temp_flag = 1;
+
+        if (current_idx == window_size) {
+            current_idx = 0;
+        }
     }
 }

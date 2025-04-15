@@ -16,7 +16,7 @@ char *lcd_strings[] = {
     "heat    ", "cool    ", "match   ", "off     "};
 char ambient_str[] = "A:xx.x";
 char plant_str[] = "P:xx.x";
-char time_n[] = "N xxxs";
+char time_n[] = "3 xxxs";
 
 void init_lcd(){
     P3DIR |= BIT0 | BIT1 | BIT4 | BIT5 | BIT6 | BIT7;       // EN, RS, DB4, DB5, DB6, DB7
