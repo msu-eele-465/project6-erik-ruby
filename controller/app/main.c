@@ -217,32 +217,25 @@ void init(void)
 
 void set_state(char state)
 {
-    switch(state)   
+    cur_state = state;
+    switch(cur_char)   
     {
         case HEAT:                      // set heat pin to 1, cool pin to 0
-            if(ambient_mode)
-            {
-                ambient_mode = 0;
-            }
             P6OUT |= BIT0;
             P6OUT &= ~BIT1;
+            current_pattern = 2;
             break;
         case COOL:                      // set heat pin to 0, cool pin to 1
-            if(ambient_mode)
-            {
-                ambient_mode = 0;
-            }
             P6OUT |= BIT0;
             P6OUT &= ~BIT1;
-            break;
-        case AMBIENT:
-            
+            current_pattern = 1;
             break;
         case OFF:                       // set pins to be both 0 V
             if(ambient_mode)
             {
                 ambient_mode = 0;
             }
+            current_pattern = 0;
             P6OUT &= ~(BIT1 + BIT0);
             break;
         default:
@@ -279,15 +272,17 @@ int main(void)
             switch(cur_char)
             {
                 case HEAT:
-                    if(cur_state != HEAT)
+                    if((cur_state != HEAT) || (ambient_mode == 1))
                     {
+                        ambient_mode = 0;
                         set_state(HEAT);
                         transmit_lcd_mode(0);
                     }
                     break;
                 case COOL:
-                    if(cur_state!= COOL)
+                    if((cur_state != COOL) || (ambient_mode == 1))
                     {
+                        ambient_mode = 0;
                         set_state(COOL);
                         transmit_lcd_mode(1);
                     }
