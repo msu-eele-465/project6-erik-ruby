@@ -74,18 +74,18 @@ void send_lcd_mode(uint8_t mode)
     lcd_send_string((char*)lcd_strings[mode]);
 }
 
-void lcd_set_time(int *data)
+void lcd_set_time(uint8_t *data)
 {
     // set DDRAM to bottom left corner
     lcd_send_command(LCD_BOTTOM_LINE);       
     DELAY_0001;
-    time_n[2] = data[0] + '0';
-    time_n[3] = data[1] + '0';
-    time_n[4] = data[2] + '0';
+    time_n[2] = data[0] + '0'; // 100 s
+    time_n[3] = data[1] + '0'; // 10 s
+    time_n[4] = data[2] + '0'; // 1 s
     lcd_send_string(time_n);
 }
 
-void lcd_set_temperature(uint8_t mode, int *data)
+void lcd_set_temperature(uint8_t mode, uint8_t *data)
 {    
     if (mode) {
         // plant temp

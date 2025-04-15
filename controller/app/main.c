@@ -79,8 +79,8 @@ void transmit_lcd_elapsed_time()
     int total_sec = cur_min_elapsed * 60;
     total_sec = total_sec + cur_sec_elapsed;
 
-    time_arr[0] = total_sec / 100;
-    time_arr[1] = (total_sec / 100) % 10;
+    time_arr[0] = total_sec / 100; // 100 s
+    time_arr[1] = (total_sec / 10) % 10;
     time_arr[2] = total_sec % 10;
 
     lcd_set_time(time_arr);
@@ -114,13 +114,13 @@ void avg_temp(){
     temp = (temp - 1.3605) / (-11.77/1000.0);
     lm19_temp = temp;
 
-    int int_arr[3];
+    uint8_t int_arr[3];
 
-    int_arr[0] = ((int) temp / 10);
+    int_arr[0] = ((uint8_t) temp / 10);
 
-    int_arr[1] = ((int) temp % 10);
+    int_arr[1] = ((uint8_t) temp % 10);
 
-    int_arr[2] = ((int)(temp * 10) % 10);
+    int_arr[2] = ((uint8_t)(temp * 10) % 10);
 
     set_temperature_ambient(int_arr);
     
@@ -221,13 +221,15 @@ void set_state(char state)
     switch(cur_char)   
     {
         case HEAT:                      // set heat pin to 1, cool pin to 0
-            P6OUT |= BIT0;
             P6OUT &= ~BIT1;
+            P6OUT |= BIT0;
+            
             current_pattern = 2;
             break;
         case COOL:                      // set heat pin to 0, cool pin to 1
-            P6OUT |= BIT0;
-            P6OUT &= ~BIT1;
+            P6OUT &= ~BIT0;
+            P6OUT |= BIT1;
+           
             current_pattern = 1;
             break;
         case OFF:                       // set pins to be both 0 V
@@ -259,8 +261,10 @@ int main(void)
     int ret = FAILURE;
 
     init();
+    init_lcd();
     init_keypad(&keypad);
     set_state(OFF);
+    DELAY_0001;
     transmit_lcd_mode(3);                    // resets time too
 
     while(1)
@@ -344,16 +348,6 @@ int main(void)
             UCB0CTLW0 |= UCTXSTT;        // generate START cond.
 
             read_temp_flag = 0;
-
-            lm92_temp_float = ((float)lm92_temp) * .0625;
-
-            int int_arr[3];
-            int_arr[0] = ((int) lm92_temp_float / 10);
-            int_arr[1] = ((int) lm92_temp_float % 10);
-            int_arr[2] = ((int)(lm92_temp_float * 10) % 10);
-            set_temperature_plant(int_arr);
-
-            lm92_temp = 0;
         }
 
         // send register address of time, read 
@@ -368,17 +362,8 @@ int main(void)
             UCB0TBCNT = 2;
 
             UCB0CTLW0 &= ~UCTR;          // Put into Rx mode
-            UCB0CTLW0 |= UCTXSTT;        // generate START cond.
+            UCB0CTLW0 |= UCTXSTT;        // generate START cond.   
 
-            read_time_flag = 0;
-            
-            if(cur_min_elapsed > 4)          // after 300s (5 min), turn off
-            {
-                __delay_cycles(1000);
-                set_state(OFF);
-                transmit_lcd_mode(3);
-            }
-            transmit_lcd_elapsed_time();
         }
 
         __delay_cycles(100000);             // Delay for 100000*(1/MCLK)=0.1s
@@ -427,6 +412,16 @@ __interrupt void transmit_data(void)
             {
                 lm92_temp = UCB0RXBUF;
                 lm92_temp <<= 4;
+                lm92_temp_float = (float)lm92_temp;
+                lm92_temp_float = lm92_temp_float * .0625;
+
+                uint8_t int_arr[3];
+                int_arr[0] = ((int) lm92_temp_float / 10);
+                int_arr[1] = ((int) lm92_temp_float % 10);
+                int_arr[2] = ((int)(lm92_temp_float * 10) % 10);
+                set_temperature_plant(int_arr);
+
+                lm92_temp = 0;
             }
         }
         else 
@@ -435,6 +430,16 @@ __interrupt void transmit_data(void)
             {
                 cur_min_elapsed = UCB0RXBUF; 
                 read_sec = 0;   
+
+                read_time_flag = 0;
+            
+                if(cur_min_elapsed > 4)          // after 300s (5 min), turn off
+                {
+                    __delay_cycles(1000);
+                    set_state(OFF);
+   
+                }
+                transmit_lcd_elapsed_time();
             }
             else 
             {
