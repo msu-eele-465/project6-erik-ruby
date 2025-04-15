@@ -77,32 +77,10 @@ int main(void)
     // Disable low-power mode / GPIO high-impedance
     PM5CTL0 &= ~LOCKLPM5;
 
-    uint8_t count = 10;
-    uint8_t next = 1;
-    received_mode = HEATING;
-
     while (true)
     {
-        if (write_pattern) {
+        if (write_pattern){
             write_to_bar();
-            write_pattern = 0;
-            count--;
-        }
-
-        __delay_cycles(10000);
-
-        if ((count == 0) && (next == 1)){
-            received_mode = COOLING;
-            next = 2;
-            count = 10;
-        } else if ((count == 0) && (next == 2)){
-            received_mode = NEUTRAL;
-            next = 0;
-            count = 10;
-        } else if ((count == 0) && (next == 0)){
-            received_mode = HEATING;
-            next = 1;
-            count = 10;
         }
     }
 }
@@ -209,19 +187,19 @@ __interrupt void receive_data(void)
 __interrupt void heartbeat_LED(void)
 {
     P2OUT ^= BIT0;          // P2.0 xOR
-    // if(data_received != 0)
-    // {
-    //     // Math: .2s = (1*10^-6)(D1)(D2)(5k)    D1 = 5, D2 = 8
-    //     TB0CCR0 = 5000;
-    //     data_recieved_count++;
+    if(data_received != 0)
+    {
+        // Math: .2s = (1*10^-6)(D1)(D2)(5k)    D1 = 5, D2 = 8
+        TB0CCR0 = 5000;
+        data_recieved_count++;
         
-    //     if(data_recieved_count == 10)
-    //     {
-    //         data_received = 0;
-    //         data_recieved_count = 0;
-    //         TB0CCR0 = 25000;
-    //     }
-    // }
+        if(data_recieved_count == 10)
+        {
+            data_received = 0;
+            data_recieved_count = 0;
+            TB0CCR0 = 25000;
+        }
+    }
 
     // getting binary code for current light pattern
     switch (received_mode) {
