@@ -107,7 +107,7 @@ void avg_temp(){
 
     // convert avg of ADCmemo to temp in C
     float temp = 0;
-    temp = ((float) average) *.0105;
+    temp = ((float) average) *.0114;
 
     lm19_temp = temp;
 
@@ -403,12 +403,7 @@ __interrupt void transmit_data(void)
         {
             if(lm92_temp != 0)
             {
-                lm92_temp |= UCB0RXBUF;
-            }
-            else 
-            {
-                lm92_temp = UCB0RXBUF;
-                lm92_temp <<= 4;
+                lm92_temp |= (UCB0RXBUF >> 3);
                 lm92_temp_float = (float)lm92_temp;
                 lm92_temp_float = lm92_temp_float * .0625;
 
@@ -419,6 +414,11 @@ __interrupt void transmit_data(void)
                 set_temperature_plant(int_arr);
 
                 lm92_temp = 0;
+            }
+            else 
+            {
+                lm92_temp = UCB0RXBUF;
+                lm92_temp <<= 5;
             }
         }
         else 
@@ -463,7 +463,7 @@ __interrupt void heartbeat_LED(void)
     // {
     //     read_time_flag = 1;
     // }
-    adc_flag = 1;
+    // adc_flag = 1;
     TB1CCTL0 &= ~CCIFG;     // clear flag
 }
 // ----- end heartbeat_LED-----
@@ -475,8 +475,8 @@ __interrupt void heartbeat_LED(void)
 __interrupt void read_temps(void)
 {
     P6OUT ^= BIT6;
-    // adc_flag = 1;
-    // read_temp_flag = 1;
+    adc_flag = 1;
+    read_temp_flag = 1;
     TB1CCTL1 &= ~CCIFG;     // clear flag
 }
 
