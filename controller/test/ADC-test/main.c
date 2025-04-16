@@ -77,6 +77,8 @@ void transmit_lcd_elapsed_time()
     uint8_t time_arr[3];
     // multiply minutes by 60 and add to seconds to get 3 digits
     int total_sec = cur_min_elapsed * 60;
+    uint8_t ones_digit = cur_sec_elapsed %16;
+    cur_sec_elapsed = (10* (cur_sec_elapsed/16)) + ones_digit;
     total_sec = total_sec + cur_sec_elapsed;
 
     time_arr[0] = total_sec / 100; // 100 s
@@ -260,9 +262,9 @@ int main(void)
     init();
     init_lcd();
     init_keypad(&keypad);
-    // set_state(OFF);
+    set_state(OFF);
     DELAY_0001;
-    // transmit_lcd_mode(3);                    // resets time too
+    transmit_lcd_mode(3);                    // resets time too
 
     while(1)
     {
@@ -425,8 +427,9 @@ __interrupt void transmit_data(void)
         {
             if(read_sec)
             {
+                cur_min_elapsed = 0;
                 cur_min_elapsed = UCB0RXBUF; 
-                read_sec = 0;   
+                read_sec = 0;
 
                 read_time_flag = 0;
             
@@ -434,12 +437,14 @@ __interrupt void transmit_data(void)
                 {
                     __delay_cycles(1000);
                     set_state(OFF);
+                    transmit_lcd_mode(3);
    
                 }
                 transmit_lcd_elapsed_time();
             }
             else 
             {
+                cur_sec_elapsed = 0;
                 cur_sec_elapsed = UCB0RXBUF;
                 ++read_sec;
             }
@@ -459,11 +464,10 @@ __interrupt void transmit_data(void)
 __interrupt void heartbeat_LED(void)
 {
     P1OUT ^= BIT0;          // LED1 xOR
-    // if(cur_state != OFF)
-    // {
-    //     read_time_flag = 1;
-    // }
-    // adc_flag = 1;
+    if(cur_state != OFF)
+    {
+        read_time_flag = 1;
+    }
     TB1CCTL0 &= ~CCIFG;     // clear flag
 }
 // ----- end heartbeat_LED-----
