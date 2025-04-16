@@ -77,6 +77,8 @@ void transmit_lcd_elapsed_time()
     uint8_t time_arr[3];
     // multiply minutes by 60 and add to seconds to get 3 digits
     int total_sec = cur_min_elapsed * 60;
+    uint8_t ones_digit = cur_sec_elapsed %16;
+    cur_sec_elapsed = (10* (cur_sec_elapsed/16)) + ones_digit;
     total_sec = total_sec + cur_sec_elapsed;
 
     time_arr[0] = total_sec / 100; // 100 s
@@ -107,7 +109,7 @@ void avg_temp(){
 
     // convert avg of ADCmemo to temp in C
     float temp = 0;
-    temp = ((float) average) *.0105;
+    temp = ((float) average) *.0114;
 
     lm19_temp = temp;
 
@@ -215,16 +217,18 @@ void init(void)
 void set_state(char state)
 {
     cur_state = state;
-    switch(cur_char)   
+    switch(cur_state)   
     {
         case HEAT:                      // set heat pin to 1, cool pin to 0
             P6OUT &= ~BIT1;
+            __delay_cycles(100000);
             P6OUT |= BIT0;
             
             current_pattern = 2;
             break;
         case COOL:                      // set heat pin to 0, cool pin to 1
             P6OUT &= ~BIT0;
+            __delay_cycles(100000);
             P6OUT |= BIT1;
            
             current_pattern = 1;
@@ -260,9 +264,9 @@ int main(void)
     init();
     init_lcd();
     init_keypad(&keypad);
-    // set_state(OFF);
+    set_state(OFF);
     DELAY_0001;
-    // transmit_lcd_mode(3);                    // resets time too
+    transmit_lcd_mode(3);                    // resets time too
 
     while(1)
     {
@@ -311,14 +315,20 @@ int main(void)
         {
             // if cooler than ambient, set to heating mode.
             // tolerance of +/- 2 celsius
-            if(lm92_temp_float < lm19_temp - 2)
+            if(lm92_temp_float < lm19_temp - 1)
             {
                 set_state(HEAT);
             }
             // if warmer than ambient, set to cooling mode.
-            else if (lm92_temp_float > lm19_temp + 2)
+            else if (lm92_temp_float > lm19_temp + 1)
             {
                 set_state(COOL);
+            }
+            else 
+            {
+                P6OUT &= ~(BIT1 + BIT0);
+                current_pattern = 0;
+                transmit_pattern();
             }            
         }
 
@@ -337,6 +347,7 @@ int main(void)
         // read temperature from LM92
         if(read_temp_flag)
         {
+            __delay_cycles(1000);
             while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
             UCB0TBCNT = 2;
             UCB0I2CSA = LM92_ADDR;
@@ -344,25 +355,23 @@ int main(void)
             UCB0CTLW0 &= ~UCTR;          // Put into Rx mode
             UCB0CTLW0 |= UCTXSTT;        // generate START cond.
 
-            read_temp_flag = 0;
+            // send register address of time, read 
+            if(read_time_flag == 2)
+            {
+                 __delay_cycles(1000);
+                while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
+                UCB0TBCNT = 1;
+                UCB0I2CSA = RTC_ADDR;
+                UCB0CTLW0 |= UCTR | UCTXSTT;                      // I2C TX, start condition
+                __delay_cycles(1000);
+                while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
+                UCB0TBCNT = 2;
+
+                UCB0CTLW0 &= ~UCTR;          // Put into Rx mode
+                UCB0CTLW0 |= UCTXSTT;        // generate START cond.   
+            }
+            
         }
-
-        // send register address of time, read 
-        if(read_time_flag)
-        {
-            UCB0TBCNT = 1;
-            UCB0I2CSA = RTC_ADDR;
-            while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
-            UCB0CTLW0 |= UCTR | UCTXSTT;                      // I2C TX, start condition
-            __delay_cycles(1000);
-            while (UCB0CTLW0 & UCTXSTP);                      // Ensure stop condition got sent
-            UCB0TBCNT = 2;
-
-            UCB0CTLW0 &= ~UCTR;          // Put into Rx mode
-            UCB0CTLW0 |= UCTXSTT;        // generate START cond.   
-
-        }
-
         __delay_cycles(100000);             // Delay for 100000*(1/MCLK)=0.1s
     }
 
@@ -393,53 +402,67 @@ __interrupt void transmit_data(void)
             // register address begins at 0, then we set sec and min to 0
             UCB0TXBUF = 0;                          
         }
-        else        // LM92
-        {
-        
-        }
         break;
     case USCI_I2C_UCRXIFG0:                 // ID 0x16: Rx IFG
         if(UCB0I2CSA == LM92_ADDR)
         {
             if(lm92_temp != 0)
             {
-                lm92_temp |= UCB0RXBUF;
-            }
-            else 
-            {
-                lm92_temp = UCB0RXBUF;
-                lm92_temp <<= 4;
+                lm92_temp |= (UCB0RXBUF >> 3);
                 lm92_temp_float = (float)lm92_temp;
                 lm92_temp_float = lm92_temp_float * .0625;
 
                 uint8_t int_arr[3];
-                int_arr[0] = ((int) lm92_temp_float / 10);
-                int_arr[1] = ((int) lm92_temp_float % 10);
-                int_arr[2] = ((int)(lm92_temp_float * 10) % 10);
+                if(lm92_temp_float < 0.1)
+                {
+                    int_arr[0] = 0;
+                    int_arr[1] = 0;
+                    int_arr[2] = 0;
+                }
+                else if (lm92_temp_float >= 100) 
+                {
+                    int_arr[0] = 9;
+                    int_arr[1] = 9;
+                    int_arr[2] = 9;
+                }
+                else 
+                {
+                    int_arr[0] = ((int) lm92_temp_float / 10);
+                    int_arr[1] = ((int) lm92_temp_float % 10);
+                    int_arr[2] = ((int)(lm92_temp_float * 10) % 10);
+                }
                 set_temperature_plant(int_arr);
 
+                read_temp_flag = 0;
                 lm92_temp = 0;
+            }
+            else 
+            {
+                lm92_temp = UCB0RXBUF;
+                lm92_temp <<= 5;
             }
         }
         else 
         {
             if(read_sec)
             {
+                cur_min_elapsed = 0;
                 cur_min_elapsed = UCB0RXBUF; 
-                read_sec = 0;   
-
+                read_sec = 0;
                 read_time_flag = 0;
             
                 if(cur_min_elapsed > 4)          // after 300s (5 min), turn off
                 {
                     __delay_cycles(1000);
                     set_state(OFF);
+                    transmit_lcd_mode(3);
    
                 }
                 transmit_lcd_elapsed_time();
             }
             else 
             {
+                cur_sec_elapsed = 0;
                 cur_sec_elapsed = UCB0RXBUF;
                 ++read_sec;
             }
@@ -459,11 +482,7 @@ __interrupt void transmit_data(void)
 __interrupt void heartbeat_LED(void)
 {
     P1OUT ^= BIT0;          // LED1 xOR
-    // if(cur_state != OFF)
-    // {
-    //     read_time_flag = 1;
-    // }
-    adc_flag = 1;
+    
     TB1CCTL0 &= ~CCIFG;     // clear flag
 }
 // ----- end heartbeat_LED-----
@@ -475,8 +494,12 @@ __interrupt void heartbeat_LED(void)
 __interrupt void read_temps(void)
 {
     P6OUT ^= BIT6;
-    // adc_flag = 1;
-    // read_temp_flag = 1;
+    adc_flag = 1;
+    read_temp_flag = 1;
+    if(cur_state != OFF)
+    {
+        read_time_flag++;
+    }
     TB1CCTL1 &= ~CCIFG;     // clear flag
 }
 
