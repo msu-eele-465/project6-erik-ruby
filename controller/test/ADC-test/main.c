@@ -7,8 +7,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "../src/keypad.h"
-#include "../src/lcd.h"
+#include "../../src/keypad.h"
+#include "../../src/lcd.h"
 #include "intrinsics.h"
 #include "msp430fr2355.h"
 
@@ -108,6 +108,7 @@ void avg_temp(){
     // convert avg of ADCmemo to temp in C
     float temp = 0;
     temp = ((float) average) *.0105;
+
     lm19_temp = temp;
 
     uint8_t int_arr[3];
@@ -259,9 +260,9 @@ int main(void)
     init();
     init_lcd();
     init_keypad(&keypad);
-    set_state(OFF);
+    // set_state(OFF);
     DELAY_0001;
-    transmit_lcd_mode(3);                    // resets time too
+    // transmit_lcd_mode(3);                    // resets time too
 
     while(1)
     {
@@ -458,10 +459,11 @@ __interrupt void transmit_data(void)
 __interrupt void heartbeat_LED(void)
 {
     P1OUT ^= BIT0;          // LED1 xOR
-    if(cur_state != OFF)
-    {
-        read_time_flag = 1;
-    }
+    // if(cur_state != OFF)
+    // {
+    //     read_time_flag = 1;
+    // }
+    adc_flag = 1;
     TB1CCTL0 &= ~CCIFG;     // clear flag
 }
 // ----- end heartbeat_LED-----
@@ -473,8 +475,8 @@ __interrupt void heartbeat_LED(void)
 __interrupt void read_temps(void)
 {
     P6OUT ^= BIT6;
-    adc_flag = 1;
-    read_temp_flag = 1;
+    // adc_flag = 1;
+    // read_temp_flag = 1;
     TB1CCTL1 &= ~CCIFG;     // clear flag
 }
 
