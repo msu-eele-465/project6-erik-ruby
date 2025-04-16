@@ -87,8 +87,8 @@
                         </toolChain>
                     </folderInfo>
                     <sourceEntries>
+                        <entry excluding="test|app" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
                         <entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="test/ADC-test"/>
-                        <entry excluding="app|test" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
                     </sourceEntries>
                 </configuration>
             </storageModule>
