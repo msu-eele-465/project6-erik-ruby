@@ -1,7 +1,5 @@
 # EELE 465 project 6
 
-# EELE 465 project 5
-
 ## Introduction
 
 The goal of this project is to control the temperature of a "plant" using a thermoelectric device. There is a keypad controller which allows the user to select between three modes: heating, cooling, and temperature-matching. When in heating or cooling modes, the plant's Peltier device will only heat or cool respectively. When in temperature-matching mode, the plant will attempt to match the ambient temperature by switching between heating and cooling modes. The controller will also receive time data from an RTC. A slave processor will control a lightbar, which will indicate what mode is currently being used. Elapsed time, mode, ambient temperature, and plant temperature will be displayed on an LCD display. Temperature is displayed as a moving average using a specifiec window size.
