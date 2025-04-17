@@ -13,7 +13,7 @@
 #include "msp430fr2355.h"
 
 
-uint8_t current_pattern = 0, tx_byte_cnt = 0, avg_temp_flag = 0, cur_sec_elapsed, cur_min_elapsed, ambient_mode = 0, read_temp_flag = 0, read_time_flag = 0, read_sec = 0, has_readt = 0;
+uint8_t current_pattern = 0, avg_temp_flag = 0, cur_sec_elapsed, cur_min_elapsed, ambient_mode = 0, read_temp_flag = 0, read_time_flag = 0, read_sec = 0, has_readt = 0;
 const uint8_t LED_BAR_ADDR = 0x0A, LM92_ADDR = 0b01001000, RTC_ADDR = 0x68;
 char cur_char, cur_state; 
 float lm92_temp_float = 0, lm19_temp= 0;
@@ -46,7 +46,7 @@ void transmit_pattern()
 }
 
 /**
-* resets the 
+* resets the time
 */
 void reset_time()
 {
@@ -214,6 +214,9 @@ void init(void)
     __enable_interrupt();   // enable maskable IRQs
 }
 
+/**
+* sets state, turning on or off heating and cooling modes
+*/
 void set_state(char state)
 {
     cur_state = state;
@@ -250,11 +253,7 @@ void set_state(char state)
 
 
 /**
-* Handle character reading and set base multiplier, setting patterns as well
-* 
-* @param: NA
-*
-* @return: NA
+* Handle character reading and flags
 */
 int main(void)
 {
@@ -382,7 +381,7 @@ int main(void)
 //-- Interrupt Service Routines -----------------------
 
 /**
-* transmit_data
+* transmit and recieve data
 */
 #pragma vector = EUSCI_B0_VECTOR
 __interrupt void transmit_data(void)

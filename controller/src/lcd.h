@@ -52,6 +52,13 @@ void lcd_send(uint8_t data, uint8_t is_data);
 */
 void lcd_send_string(char *str);
 
+/**
+* send current mode to LCD
+* 
+* @param: current mode (heat, cool, match, off)
+*/
+void send_lcd_mode(uint8_t mode);
+
 
 /**
 * set elapsed time in seconds
